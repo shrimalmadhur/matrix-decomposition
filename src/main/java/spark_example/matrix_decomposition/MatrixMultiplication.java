@@ -9,6 +9,7 @@ import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 
+import scala.Function1;
 import scala.Tuple2;
 import scala.collection.Iterator;
 import scala.collection.immutable.Vector;
@@ -23,9 +24,9 @@ public final class MatrixMultiplication {
     SparkConf sparkConf = new SparkConf().setAppName("App").setMaster("local[2]");
     JavaSparkContext ctx = new JavaSparkContext(sparkConf);
 //    JavaRDD<String> lines = ctx.textFile(args[0], 1);
-    int numberOfPartitions = 2;
-    int rows = 4;
-    int cols = 4; 
+    int numberOfPartitions = 3;
+    int rows = 6;
+    int cols = 6; 
     int rowKey = rows/numberOfPartitions;
     int colKey = cols/numberOfPartitions;
     
@@ -34,6 +35,7 @@ public final class MatrixMultiplication {
     
     List<Vector<Integer>> user = new ArrayList<Vector<Integer>>();
     
+    // creating user matrix
     for(int i=0; i < rows; i++){
     	VectorBuilder<Integer> vb = new VectorBuilder<Integer>();
     	for(int j=0; j < cols; j++){
@@ -46,6 +48,7 @@ public final class MatrixMultiplication {
     
     List<Vector<Integer>> movies = new ArrayList<Vector<Integer>>();
     
+    // creating movie matrix
     for(int i=0; i < rows; i++){
     	VectorBuilder<Integer> vb = new VectorBuilder<Integer>();
     	for(int j=0; j < cols; j++){
@@ -56,17 +59,28 @@ public final class MatrixMultiplication {
     	movies.add(vec);
     }
     
+    // creating RDDs
     JavaRDD<Vector<Integer>> userRdd = ctx.parallelize(user, numberOfPartitions);
     JavaRDD<Vector<Integer>> movieRdd = ctx.parallelize(movies, numberOfPartitions);
+    
     JavaPairRDD<Vector<Integer>, Vector<Integer>> a = userRdd.cartesian(movieRdd);
     List<Tuple2<Vector<Integer>,Vector<Integer>>> arr = a.collect();
     JavaRDD<Vector<Integer>> vec =  a.values();
     java.util.Iterator<Tuple2<Vector<Integer>, Vector<Integer>>> it = arr.iterator();
+    
+    Function1<Integer, String> f = new Function1<Integer, String>() {
+      
+    };
+    
+    userRdd.keyBy(new Function(Vector<Integer>, cols){
+    	
+    });
+    
     while(it.hasNext()){
     	Tuple2<Vector<Integer>, Vector<Integer>> temp = it.next();
     	scala.collection.immutable.List<Integer> t1 = temp._1.toList();
     	scala.collection.immutable.List<Integer> t2 = temp._2.toList();
-//    	for(int i=0 ; i < t1)
+//    	for(int i=0 ; i < t1; i++)
     }
 //    List<Tuple2<Vector<Integer>,Vector<Integer>>> arr = a.toArray();
 

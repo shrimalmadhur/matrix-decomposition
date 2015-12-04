@@ -1,7 +1,10 @@
 package spark_example.matrix_decomposition;
 
-import java.util.List;
-
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.GnuParser;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -9,11 +12,37 @@ import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.linalg.DenseVector;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.distributed.IndexedRow;
-
 import scala.Tuple2;
+
+import java.util.List;
 
 public class SparkMultiplication {
 	public static void main(String[] args) {
+		CommandLineParser parser = new GnuParser();
+
+        int n = 10;
+        long uid = 0;
+
+        try {
+            CommandLine cmd = parser.parse(getOptions(), args);
+
+            if(cmd.hasOption("user")) {
+                uid = Integer.parseInt(cmd.getOptionValue("user"));
+            } else {
+                System.out.println("User id not provided!");
+                return;
+            }
+
+            if(cmd.hasOption("n")) {
+                n = Integer.parseInt(cmd.getOptionValue("n"));
+            }
+        } catch (java.lang.NumberFormatException e) {
+            System.out.println("Invalid number format!");
+            return;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
 		SparkConf sparkConf = new SparkConf().setAppName("App").setMaster("local[3]");
 	    JavaSparkContext sc = new JavaSparkContext(sparkConf);
 	    
@@ -37,7 +66,6 @@ public class SparkMultiplication {
 				
 				return new IndexedRow(key, v);
 			}
-	    	
 	    });
 	    
 	    
@@ -58,10 +86,9 @@ public class SparkMultiplication {
 				
 				return new IndexedRow(key, v);
 			}
-	    	
 	    });
-	    
-	    final long userId = 2;
+
+        final long userId = uid;
 	    JavaRDD<IndexedRow> a = usersRDD.filter(new Function<IndexedRow, Boolean>() {
 
 			@Override
@@ -87,11 +114,13 @@ public class SparkMultiplication {
 				return new Tuple2<Long, Double>(key, val);
 			}
 		});
+
 	    result.saveAsTextFile("res/output");
 	    List<Tuple2<Long, Double>> ret = result.collect();
-	    for(Tuple2<Long, Double> curr: ret){
-	    	System.out.println(curr._1 + " " + curr._2);
-	    }
+
+        for (int i = 0; i < n; i++) {
+            System.out.println(ret.get(i)._1 + " " + ret.get(i)._2);
+        }
 	    
 	    sc.stop();
 	}
@@ -103,5 +132,11 @@ public class SparkMultiplication {
 	    }
 	    System.out.println();
 	}
-	
+
+	private static Options getOptions() {
+		Options options = new Options();
+		options.addOption(new Option("user", true, "The user id to whom we are recommending"));
+		options.addOption(new Option("n", true, "Number of recommendations"));
+		return options;
+	}
 }

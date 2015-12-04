@@ -14,13 +14,13 @@ import scala.Tuple2;
 
 public class SparkMultiplication {
 	public static void main(String[] args) {
-		SparkConf sparkConf = new SparkConf().setAppName("App").setMaster("local[3]");
+		SparkConf sparkConf = new SparkConf().setAppName("App");
 	    JavaSparkContext sc = new JavaSparkContext(sparkConf);
 	    
 	    LocalitySensitiveHash lsh = new LocalitySensitiveHash(1.0, 4);
 	    System.out.println("Num partitions -> " + lsh.getNumPartitions());
 	    
-	    JavaRDD<String> usersFile = sc.textFile("res/users.txt");
+	    JavaRDD<String> usersFile = sc.textFile("/res/users.txt");
 	    
 	    JavaRDD<IndexedRow> usersRDD = usersFile.map(new Function<String, IndexedRow>(){
 
@@ -41,7 +41,7 @@ public class SparkMultiplication {
 	    });
 	    
 	    
-	    JavaRDD<String> moviesFile = sc.textFile("res/items.txt");
+	    JavaRDD<String> moviesFile = sc.textFile("/res/items.txt");
 	    
 	    JavaRDD<IndexedRow> moviesRDD = moviesFile.map(new Function<String, IndexedRow>(){
 
@@ -87,7 +87,7 @@ public class SparkMultiplication {
 				return new Tuple2<Long, Double>(key, val);
 			}
 		});
-	    result.saveAsTextFile("res/output");
+	    result.saveAsTextFile("/res/output");
 	    List<Tuple2<Long, Double>> ret = result.collect();
 	    for(Tuple2<Long, Double> curr: ret){
 	    	System.out.println(curr._1 + " " + curr._2);

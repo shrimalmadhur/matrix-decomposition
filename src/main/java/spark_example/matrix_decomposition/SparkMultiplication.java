@@ -1,10 +1,15 @@
 package spark_example.matrix_decomposition;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.PriorityQueue;
+
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
-import org.apache.commons.cli.GnuParser;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -12,9 +17,8 @@ import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.linalg.DenseVector;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.distributed.IndexedRow;
-import scala.Tuple2;
 
-import java.util.List;
+import scala.Tuple2;
 
 public class SparkMultiplication {
 	public static void main(String[] args) {
@@ -22,6 +26,7 @@ public class SparkMultiplication {
 
         int n = 10;
         long uid = 0;
+        String outputFolder = "/res/output";
 
         try {
             CommandLine cmd = parser.parse(getOptions(), args);
@@ -36,7 +41,11 @@ public class SparkMultiplication {
             if(cmd.hasOption("n")) {
                 n = Integer.parseInt(cmd.getOptionValue("n"));
             }
-        } catch (java.lang.NumberFormatException e) {
+            
+            if(cmd.hasOption("output")){
+            	outputFolder = cmd.getOptionValue("output");
+            }
+         } catch (java.lang.NumberFormatException e) {
             System.out.println("Invalid number format!");
             return;
         } catch (Exception e) {
@@ -46,8 +55,14 @@ public class SparkMultiplication {
 		SparkConf sparkConf = new SparkConf().setAppName("App");
 	    JavaSparkContext sc = new JavaSparkContext(sparkConf);
 	    
-	    LocalitySensitiveHash lsh = new LocalitySensitiveHash(1.0, 4);
-	    System.out.println("Num partitions -> " + lsh.getNumPartitions());
+
+	    PriorityQueue<Tuple2<Long, Double>> pq = new PriorityQueue<Tuple2<Long, Double>>(n, new Comparator<Tuple2<Long, Double>>() {
+
+			@Override
+			public int compare(Tuple2<Long, Double> o1, Tuple2<Long, Double> o2) {
+				return o1._2.compareTo(o2._2);
+			}
+		});
 	    
 	    JavaRDD<String> usersFile = sc.textFile("/res/users.txt");
 	    
@@ -114,12 +129,30 @@ public class SparkMultiplication {
 				return new Tuple2<Long, Double>(key, val);
 			}
 		});
-	    result.saveAsTextFile("res/output");
+	    
+	    
 	    List<Tuple2<Long, Double>> ret = result.collect();
 
-        for (int i = 0; i < n; i++) {
-            System.out.println(ret.get(i)._1 + " " + ret.get(i)._2);
+        for(Tuple2<Long, Double> each: ret){
+        	if(pq.size() < 10){
+        		pq.offer(each);
+        	}else{
+        		Tuple2<Long, Double> curr = pq.peek();
+        		if(curr._2 < each._2){
+        			pq.poll();
+        			pq.offer(each);
+        		}
+        	}
         }
+        List<Tuple2<Long, Double>> newResult = new ArrayList<Tuple2<Long, Double>>();
+        while(pq.size() > 0){
+        	newResult.add(pq.poll());
+        }
+        
+        JavaRDD<Tuple2<Long, Double>> resultRDD = sc.parallelize(newResult);
+        
+        resultRDD.saveAsTextFile(outputFolder);
+       
 	    
 	    sc.stop();
 	}
@@ -136,6 +169,7 @@ public class SparkMultiplication {
 		Options options = new Options();
 		options.addOption(new Option("user", true, "The user id to whom we are recommending"));
 		options.addOption(new Option("n", true, "Number of recommendations"));
+		options.addOption(new Option("output", true, "The location of output folder"));
 		return options;
 	}
 }

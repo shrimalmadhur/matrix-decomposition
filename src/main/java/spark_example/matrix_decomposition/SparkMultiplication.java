@@ -115,7 +115,7 @@ public class SparkMultiplication {
 	    
 	    
 	    final double[] user = a.first().vector().toArray();
-	    printDoubleArr("user", user);
+//	    printDoubleArr("user", user);
 	    
 	    JavaRDD<Tuple2<Long, Double>> result = moviesRDD.map(new Function<IndexedRow, Tuple2<Long, Double>>() {
 
@@ -124,7 +124,7 @@ public class SparkMultiplication {
 				double[] movie = v1.vector().toArray();
 				
 				long key = v1.index();
-				printDoubleArr("movie"+key , movie);
+//				printDoubleArr("movie"+key , movie);
 				Double val = VectorMath.dot(user, movie);
 				return new Tuple2<Long, Double>(key, val);
 			}
@@ -134,7 +134,7 @@ public class SparkMultiplication {
 	    List<Tuple2<Long, Double>> ret = result.collect();
 
         for(Tuple2<Long, Double> each: ret){
-        	if(pq.size() < 10){
+        	if(pq.size() < n){
         		pq.offer(each);
         	}else{
         		Tuple2<Long, Double> curr = pq.peek();

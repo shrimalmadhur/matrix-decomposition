@@ -1,6 +1,5 @@
 package spark_example.matrix_decomposition;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -8,6 +7,13 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.mllib.linalg.DenseMatrix;
+import org.apache.spark.mllib.linalg.Matrix;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.mllib.linalg.distributed.IndexedRow;
+import org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix;
+import org.apache.spark.mllib.linalg.distributed.RowMatrix;
 
 import scala.Function1;
 import scala.Tuple2;
@@ -16,88 +22,89 @@ import scala.collection.immutable.Vector;
 import scala.collection.immutable.VectorBuilder;
 
 
+
 public final class MatrixMultiplication {
   private static final Pattern SPACE = Pattern.compile(" ");
 
   public static void main(String[] args) throws Exception {
 
     SparkConf sparkConf = new SparkConf().setAppName("App").setMaster("local[2]");
-    JavaSparkContext ctx = new JavaSparkContext(sparkConf);
+    JavaSparkContext sc = new JavaSparkContext(sparkConf);
 //    JavaRDD<String> lines = ctx.textFile(args[0], 1);
     int numberOfPartitions = 3;
     int rows = 6;
     int cols = 6; 
+
     int rowKey = rows/numberOfPartitions;
     int colKey = cols/numberOfPartitions;
+
+
+    JavaRDD<String> distFile = sc.textFile("res/matrix");
     
-//    Matrix user = Matrices.dense(rows, cols, new double[] {1.0, 3.0, 5.0, 2.0, 4.0, 6.0, 1.2, 2.3, 1.3, 3.4, 5.6, 2.3, 4.5, 6.7, 1.2, 2.3});
-//    Matrix movies = Matrices.dense(rows, cols, new double[] {2.0, 4.0, 6.0, 8.0, 10.0, 6.0, 1.2, 2.3, 1.3, 3.4, 5.6, 2.3, 4.5, 6.7, 1.2, 2.3});
+    JavaRDD<org.apache.spark.mllib.linalg.Vector> movRDD = distFile.map(new Function<String, org.apache.spark.mllib.linalg.Vector>() {
+      public org.apache.spark.mllib.linalg.Vector call(String s) throws Exception {
+        String[] sa = s.split(",");
+        double[] da = new double[sa.length];
+        for(int i = 0; i < sa.length; i++) {
+          da[i] = Double.valueOf(sa[i]);
+        }
+        return Vectors.dense(da);
+      }
+    });
+//    int count = 0;
+    JavaRDD<IndexedRow> indexedRDD = distFile.map(new Function<String, IndexedRow>() {
+      public IndexedRow call(String s) throws Exception {
+        String[] sa = s.split(",");
+        double[] da = new double[sa.length];
+        for(int i = 0; i < sa.length; i++) {
+          da[i] = Double.valueOf(sa[i]);
+        }
+        return new IndexedRow((long)da[0], Vectors.dense(da));
+      } 
+    });
     
-    List<Vector<Integer>> user = new ArrayList<Vector<Integer>>();
+    JavaRDD<String> distFile1 = sc.textFile("res/new");
+    JavaRDD<IndexedRow> newindexedRDD = distFile1.map(new Function<String, IndexedRow>() {
+        public IndexedRow call(String s) throws Exception {
+          String[] sa = s.split(",");
+          double[] da = new double[sa.length];
+          for(int i = 0; i < sa.length; i++) {
+            da[i] = Double.valueOf(sa[i]);
+          }
+          return new IndexedRow((long)da[0], Vectors.dense(da));
+        } 
+      });
     
-    // creating user matrix
-    for(int i=0; i < rows; i++){
-    	VectorBuilder<Integer> vb = new VectorBuilder<Integer>();
-    	for(int j=0; j < cols; j++){
-    		vb.$plus$eq(Integer.valueOf(i+j));
-    	}
-    	Vector<Integer> vec = vb.result();
-    	System.out.println(vec.size());
-    	user.add(vec);
-    }
+    indexedRDD.union(newindexedRDD);
     
-    List<Vector<Integer>> movies = new ArrayList<Vector<Integer>>();
-    
-    // creating movie matrix
-    for(int i=0; i < rows; i++){
-    	VectorBuilder<Integer> vb = new VectorBuilder<Integer>();
-    	for(int j=0; j < cols; j++){
-    		vb.$plus$eq(Integer.valueOf(i+j));
-    	}
-    	Vector<Integer> vec = vb.result();
-    	System.out.println(vec.size());
-    	movies.add(vec);
-    }
-    
-    // creating RDDs
-    JavaRDD<Vector<Integer>> userRdd = ctx.parallelize(user, numberOfPartitions);
-    JavaRDD<Vector<Integer>> movieRdd = ctx.parallelize(movies, numberOfPartitions);
-    
-    JavaPairRDD<Vector<Integer>, Vector<Integer>> a = userRdd.cartesian(movieRdd);
-    List<Tuple2<Vector<Integer>,Vector<Integer>>> arr = a.collect();
-    JavaRDD<Vector<Integer>> vec =  a.values();
-    java.util.Iterator<Tuple2<Vector<Integer>, Vector<Integer>>> it = arr.iterator();
-    
-    Function1<Integer, String> f = new Function1<Integer, String>() {
-      
-    };
-    
-    userRdd.keyBy(new Function(Vector<Integer>, cols){
+    JavaRDD<IndexedRow> i = indexedRDD.filter(new Function<IndexedRow, Boolean>() {
+
+		@Override
+		public Boolean call(IndexedRow v1) throws Exception {
+			// TODO Auto-generated method stub
+			
+			return v1.index() == 2;
+		}
     	
     });
     
-    while(it.hasNext()){
-    	Tuple2<Vector<Integer>, Vector<Integer>> temp = it.next();
-    	scala.collection.immutable.List<Integer> t1 = temp._1.toList();
-    	scala.collection.immutable.List<Integer> t2 = temp._2.toList();
-//    	for(int i=0 ; i < t1; i++)
-    }
-//    List<Tuple2<Vector<Integer>,Vector<Integer>>> arr = a.toArray();
 
-    List<Vector<Integer>> col = vec.collect();
-    System.out.println("Size: " + col.size());
-    for(Vector<Integer> temp: col){
-    	Iterator<Integer> itr = temp.toIterator();
-    	while(itr.hasNext()){
-    		System.out.print(itr.next());
-    	}
-    	System.out.println();
-    }
-    System.out.println(a.toString());
+    IndexedRowMatrix indexedRowMatrix = new IndexedRowMatrix(indexedRDD.rdd());
     
-   
     
-    ctx.stop();
+    RowMatrix movieMatrix = new RowMatrix(movRDD.rdd());
+    
+    System.out.println("movieMatrix: " + movieMatrix.numRows() + " rows, " + movieMatrix.numCols() + " cols.");
+
+    Matrix userMatrix = new DenseMatrix(5, 2, new double[] {1, 1, 1, 1, 1, 2, 2, 2, 2, 2});
+    System.out.println("serMatrix: " + userMatrix.numRows() + " rows, " + userMatrix.numCols() + " cols.");
+
+    RowMatrix result = movieMatrix.multiply(userMatrix);
+    System.out.println("resultMatrix: " + result.numRows() + " rows, " + result.numCols() + " cols.");
+
+    result.rows().saveAsTextFile("res/result");
+
+    sc.stop();
   }
 }
 

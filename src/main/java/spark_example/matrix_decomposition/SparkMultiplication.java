@@ -5,55 +5,42 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.PriorityQueue;
 
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.GnuParser;
-import org.apache.commons.cli.Option;
-import org.apache.commons.cli.Options;
-import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.linalg.DenseVector;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.distributed.IndexedRow;
+import org.codehaus.jettison.json.JSONArray;
+import org.codehaus.jettison.json.JSONException;
+import org.codehaus.jettison.json.JSONObject;
+
+import com.typesafe.config.Config;
 
 import scala.Tuple2;
+import spark.jobserver.JavaSparkJob;
 
-public class SparkMultiplication {
-	public static void main(String[] args) {
-		CommandLineParser parser = new GnuParser();
+public class SparkMultiplication extends JavaSparkJob{
+	private static JavaRDD<IndexedRow> usersRDD;
+	private static JavaRDD<IndexedRow> moviesRDD;
+	
+	@Override
+	public Object runJob(JavaSparkContext jsc, Config jobConfig) {
+		// TODO Auto-generated method stub
+		System.out.println("JavaSparkContext");
+		System.out.println(jsc);
+		Long userid = Long.parseLong(jobConfig.getString("user"));
+		String outputFolder = jobConfig.getString("output");
+		int n = Integer.parseInt(jobConfig.getString("n"));
+		
+		return getReco(jsc, userid, outputFolder, n);
+	}
+	public static Object getReco(JavaSparkContext sc, Long uid , String outputFolder, int n) {
 
-        int n = 10;
-        long uid = 0;
-        String outputFolder = "/res/output";
 
-        try {
-            CommandLine cmd = parser.parse(getOptions(), args);
-
-            if(cmd.hasOption("user")) {
-                uid = Integer.parseInt(cmd.getOptionValue("user"));
-            } else {
-                System.out.println("User id not provided!");
-                return;
-            }
-
-            if(cmd.hasOption("n")) {
-                n = Integer.parseInt(cmd.getOptionValue("n"));
-            }
-            
-            if(cmd.hasOption("output")){
-            	outputFolder = cmd.getOptionValue("output");
-            }
-         } catch (java.lang.NumberFormatException e) {
-            System.out.println("Invalid number format!");
-            return;
-        } catch (Exception e) {
-            e.printStackTrace();
+        if(outputFolder == null){
+        	outputFolder = "/res/output";
         }
-
-		SparkConf sparkConf = new SparkConf().setAppName("App");
-	    JavaSparkContext sc = new JavaSparkContext(sparkConf);
 	    
 
 	    PriorityQueue<Tuple2<Long, Double>> pq = new PriorityQueue<Tuple2<Long, Double>>(n, new Comparator<Tuple2<Long, Double>>() {
@@ -64,46 +51,61 @@ public class SparkMultiplication {
 			}
 		});
 	    
+	    long startUserTime = System.currentTimeMillis();
 	    JavaRDD<String> usersFile = sc.textFile("/res/users.txt");
 	    
-	    JavaRDD<IndexedRow> usersRDD = usersFile.map(new Function<String, IndexedRow>(){
+	    if(usersRDD == null){
+	    	usersRDD = usersFile.map(new Function<String, IndexedRow>(){
 
-			@Override
-			public IndexedRow call(String v1) throws Exception {
-				String[] arr = v1.split(",");
-				long key = Long.parseLong(arr[0]);
-				int len = arr.length;
-				double[] vec = new double[len-1];
-				for(int i=0; i < len-1; i++){
-					vec[i] = Double.parseDouble(arr[i+1]);
+				@Override
+				public IndexedRow call(String v1) throws Exception {
+					String[] arr = v1.split(",");
+					long key = Long.parseLong(arr[0]);
+					int len = arr.length;
+					double[] vec = new double[len-1];
+					for(int i=0; i < len-1; i++){
+						vec[i] = Double.parseDouble(arr[i+1]);
+					}
+					Vector v = new DenseVector(vec);
+					
+					return new IndexedRow(key, v);
 				}
-				Vector v = new DenseVector(vec);
-				
-				return new IndexedRow(key, v);
-			}
-	    });
+		    });
+		    usersRDD.count();
+	    }
 	    
 	    
+	    long endUserTime = System.currentTimeMillis();
+	    
+	    System.out.println("Time for user matrix: "  + (endUserTime - startUserTime) + "ms");
+	    
+	    long startMovieTime = System.currentTimeMillis();
 	    JavaRDD<String> moviesFile = sc.textFile("/res/items.txt");
 	    
-	    JavaRDD<IndexedRow> moviesRDD = moviesFile.map(new Function<String, IndexedRow>(){
+	    if(moviesRDD == null){
+	    	moviesRDD = moviesFile.map(new Function<String, IndexedRow>(){
 
-			@Override
-			public IndexedRow call(String v1) throws Exception {
-				String[] arr = v1.split(",");
-				long key = Long.parseLong(arr[0]);
-				int len = arr.length;
-				double[] vec = new double[len-1];
-				for(int i=0; i < len-1; i++){
-					vec[i] = Double.parseDouble(arr[i+1]);
+				@Override
+				public IndexedRow call(String v1) throws Exception {
+					String[] arr = v1.split(",");
+					long key = Long.parseLong(arr[0]);
+					int len = arr.length;
+					double[] vec = new double[len-1];
+					for(int i=0; i < len-1; i++){
+						vec[i] = Double.parseDouble(arr[i+1]);
+					}
+					Vector v = new DenseVector(vec);
+					
+					return new IndexedRow(key, v);
 				}
-				Vector v = new DenseVector(vec);
-				
-				return new IndexedRow(key, v);
-			}
-	    });
-
+		    });
+		    moviesRDD.count();
+	    }
+	    long endMovieTime = System.currentTimeMillis();
+	    System.out.println("Time for movie matrix: "  + (endMovieTime - startMovieTime) + "ms");
         final long userId = uid;
+        
+        long startRecommendTime = System.currentTimeMillis();
 	    JavaRDD<IndexedRow> a = usersRDD.filter(new Function<IndexedRow, Boolean>() {
 
 			@Override
@@ -145,16 +147,32 @@ public class SparkMultiplication {
         	}
         }
         List<Tuple2<Long, Double>> newResult = new ArrayList<Tuple2<Long, Double>>();
+        JSONArray out = new JSONArray();
+        int size = n;
+        int count = 0;
         while(pq.size() > 0){
-        	newResult.add(pq.poll());
+        	Tuple2<Long, Double> curr = pq.poll();
+        	JSONObject obj = new JSONObject();
+        	try {
+				obj.put("ID", curr._1);
+				obj.put("score", curr._2);
+				out.put(size - count - 1, obj);
+				count++;
+			} catch (JSONException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+        	
+        	newResult.add(curr);
         }
-        
+        long endRecommendTime = System.currentTimeMillis();
+        System.out.println("Time for Recommend matrix: "  + (endRecommendTime - startRecommendTime) + "ms");
         JavaRDD<Tuple2<Long, Double>> resultRDD = sc.parallelize(newResult);
         
         resultRDD.saveAsTextFile(outputFolder);
        
 	    
-	    sc.stop();
+	    return out.toString();
 	}
 	
 	public static void printDoubleArr(String name, double[] arr){
@@ -163,13 +181,5 @@ public class SparkMultiplication {
 	    	System.out.print(arr[i] + " ");
 	    }
 	    System.out.println();
-	}
-
-	private static Options getOptions() {
-		Options options = new Options();
-		options.addOption(new Option("user", true, "The user id to whom we are recommending"));
-		options.addOption(new Option("n", true, "Number of recommendations"));
-		options.addOption(new Option("output", true, "The location of output folder"));
-		return options;
 	}
 }

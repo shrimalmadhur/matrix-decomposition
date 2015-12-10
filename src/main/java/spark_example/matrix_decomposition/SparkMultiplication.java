@@ -1,5 +1,8 @@
 package spark_example.matrix_decomposition;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -133,9 +136,37 @@ public class SparkMultiplication extends JavaSparkJob{
 		});
 	    
 	    
+	    
 	    List<Tuple2<Long, Double>> ret = result.collect();
-
+	    long endRecommendTime = System.currentTimeMillis();
+	    System.out.println("Time for Recommend matrix: "  + (endRecommendTime - startRecommendTime) + "ms");
+	    
+	    
+	    long startPQTime = System.currentTimeMillis();
+	    
+	    // ----- Read exisiting Data from local file system ----- / 
+	    List<Long> currUserList = new ArrayList<Long>();
+	    try {
+			BufferedReader in = new BufferedReader(new FileReader(new File("/root/data.csv")));
+			String line;
+			while((line = in.readLine()) != null){
+				String[] arr = line.split(",");
+				Long currUserId = Long.parseLong(arr[0]);
+				Long currMovieId = Long.parseLong(arr[1]);
+				if(currUserId == userId){
+					currUserList.add(currMovieId);
+				}
+			}
+			in.close();
+		} catch (Exception e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+	    // -------------- &&&&& -------------------------------//
+	    
         for(Tuple2<Long, Double> each: ret){
+        	if(currUserList.contains(each._1))
+        		continue;
         	if(pq.size() < n){
         		pq.offer(each);
         	}else{
@@ -165,8 +196,9 @@ public class SparkMultiplication extends JavaSparkJob{
         	
         	newResult.add(curr);
         }
-        long endRecommendTime = System.currentTimeMillis();
-        System.out.println("Time for Recommend matrix: "  + (endRecommendTime - startRecommendTime) + "ms");
+        
+        long endPQTime = System.currentTimeMillis();
+        System.out.println("Time for Recommend matrix: "  + (endPQTime - startPQTime) + "ms");
         JavaRDD<Tuple2<Long, Double>> resultRDD = sc.parallelize(newResult);
         
         resultRDD.saveAsTextFile(outputFolder);
